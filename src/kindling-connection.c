@@ -25,7 +25,9 @@ telepathy-kindling is free software: you can redistribute it and/or modify it
 #include <libsoup/soup.h>
 #include <json-glib/json-glib.h>
 
-G_DEFINE_TYPE (KindlingConnection, kindling_connection, TP_TYPE_BASE_CONNECTION);
+G_DEFINE_TYPE_WITH_CODE (KindlingConnection, kindling_connection, TP_TYPE_BASE_CONNECTION,
+			G_IMPLEMENT_INTERFACE(TP_TYPE_SVC_CONNECTION_INTERFACE_CONTACTS, tp_contacts_mixin_iface_init)
+);
 
 static const gchar * interfaces_always_present[] = {
         TP_IFACE_CONNECTION_INTERFACE_ALIASING,
@@ -106,6 +108,8 @@ static void kindling_connection_get_property(GObject *obj, guint prop_id, GValue
 static void
 kindling_connection_init (KindlingConnection *kindling_connection) {
 		g_printf("connection init\n");
+	tp_contacts_mixin_init ((GObject *) kindling_connection, G_STRUCT_OFFSET (KindlingConnection, contacts));
+	tp_base_connection_register_with_contacts_mixin((TpBaseConnection *)kindling_connection);
 }
 
 static void _soup_authenticate_cb(SoupSession *session,
@@ -144,6 +148,7 @@ kindling_connection_finalize (GObject *object) {
 	
 	g_signal_handler_disconnect(priv->soup_session, priv->soup_auth_cb_handle);
 	g_object_unref(priv->soup_session);
+	tp_contacts_mixin_finalize (object);
 		g_printf("finalize kindling connection object\n");
 	G_OBJECT_CLASS (kindling_connection_parent_class)->finalize (object);
 }

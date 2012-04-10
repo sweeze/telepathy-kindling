@@ -29,7 +29,7 @@ G_DEFINE_TYPE_WITH_CODE (KindlingMUCManager, kindling_muc_manager, G_TYPE_OBJECT
 static void
 kindling_muc_manager_init (KindlingMUCManager *kindling_muc_manager)
 {
-
+	g_printf("init kindling muc manager\n");
 
 	/* TODO: Add initialization code here */
 }
@@ -37,6 +37,7 @@ kindling_muc_manager_init (KindlingMUCManager *kindling_muc_manager)
 static void
 kindling_muc_manager_finalize (GObject *object)
 {
+	g_printf("finalize kindling muc manager\n");
 	/* TODO: Add deinitalization code here */
 
 	G_OBJECT_CLASS (kindling_muc_manager_parent_class)->finalize (object);
@@ -45,6 +46,7 @@ kindling_muc_manager_finalize (GObject *object)
 static void
 kindling_muc_manager_class_init (KindlingMUCManagerClass *klass)
 {
+	g_printf("class init kindling muc manager\n");
 	GObjectClass* object_class = G_OBJECT_CLASS (klass);
 	GObjectClass* parent_class = G_OBJECT_CLASS (klass);
 
@@ -52,5 +54,6 @@ kindling_muc_manager_class_init (KindlingMUCManagerClass *klass)
 }
 
 static void _muc_manager_iface_init(gpointer g_iface, gpointer iface_data) {
+	g_printf("iface init kindling muc manager\n");
 	TpChannelManagerIface *iface = g_iface;
 }

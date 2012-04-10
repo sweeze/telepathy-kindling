@@ -21,3 +21,4 @@ src/.deps
 libtool
 src/*.o
 src/telepathy_kindling
+*~

@@ -80,7 +80,7 @@ static void get_connection_details(TpBaseProtocol *self,
                                    gchar **icon_name,
                                    char **english_name,
                                    gchar **vcard_field) {
-	g_printf("called get details\n");
+	g_printf("called protocol get details\n");
 	if (connection_interfaces != NULL) {
 		*connection_interfaces = g_strdupv((GStrv) kindling_connection_get_implemented_interfaces());
 	}
@@ -104,19 +104,19 @@ static void get_connection_details(TpBaseProtocol *self,
 
 static GStrv
 dup_authentication_types (TpBaseProtocol *base) {
-	g_printf("duping auth types\n");
+	g_printf("protocol duping auth types\n");
 	const gchar * const types [] = {
 		TP_IFACE_CHANNEL_INTERFACE_SASL_AUTHENTICATION, NULL, };
 	return g_strdupv((GStrv)types);
 }
 
 static gchar *normalize_contact(TpBaseProtocol *self, const gchar *contact, GError **error) {
-	g_printf("normalizing contact\n");
+	g_printf("protocol normalizing contact\n");
 	return g_strdupv(contact);
 }
 
 static char *identify_account(TpBaseProtocol *self, GHashTable *asv, GError **error) {
-		g_printf("identing account\n");
+		g_printf("protocol identing account\n");
 	gchar *nick = g_strdupv(tp_asv_get_string(asv, "username"));
 	gchar *server = g_strdupv(tp_asv_get_string(asv, "server"));
 	gchar *nick_at_server = g_strdup_printf("%s@%s", nick, server);
@@ -128,7 +128,7 @@ static char *identify_account(TpBaseProtocol *self, GHashTable *asv, GError **er
 static GStrv
 get_interfaces (TpBaseProtocol *self)
 {
-	g_printf("get interfaces\n");
+	g_printf("protocol get interfaces\n");
   return g_new0 (gchar *, 1);
 }
 

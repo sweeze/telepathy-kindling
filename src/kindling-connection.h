@@ -22,6 +22,7 @@ telepathy-kindling is free software: you can redistribute it and/or modify it
 
 #include <glib-object.h>
 #include <telepathy-glib/base-protocol.h>
+#include <telepathy-glib/contacts-mixin.h>
 
 G_BEGIN_DECLS
 
@@ -40,11 +41,13 @@ typedef struct _KindlingConnection KindlingConnection;
 struct _KindlingConnectionClass
 {
 	TpBaseConnectionClass parent_class;
+	TpContactsMixinClass contacts;
 };
 
 struct _KindlingConnection
 {
 	TpBaseConnection parent_instance;
+	TpContactsMixin contacts;
 
  
 };
