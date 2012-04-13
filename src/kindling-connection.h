@@ -47,9 +47,7 @@ struct _KindlingConnectionClass
 struct _KindlingConnection
 {
 	TpBaseConnection parent_instance;
-	TpContactsMixin contacts;
-
- 
+	TpContactsMixin contacts; 
 };
 
 GType kindling_connection_get_type (void) G_GNUC_CONST;

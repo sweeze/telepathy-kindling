@@ -117,12 +117,55 @@ static void _soup_authenticate_cb(SoupSession *session,
                                   SoupAuth *auth,
                                   gboolean retrying,
                                   gpointer user_data) {
-	g_printf("soup authenitcate\n");
 	KindlingConnectionPrivate *priv = KINDLING_CONNECTION_GET_PRIVATE(user_data);
 	if (!retrying) {
-		soup_auth_authenticate(auth, priv->username, priv->password);
+		if (priv->api_token != NULL) {
+			g_printf("soup authenitcate with token\n");
+			soup_auth_authenticate (auth, priv->api_token, "x");
+		} else {
+			g_printf("soup authenitcate with username\n");
+			soup_auth_authenticate(auth, priv->username, priv->password);
+		}
 	}
 									  
+}
+
+static GQuark _canon_nick_quark() {
+	static GQuark quark = 0;
+
+	if (!quark) {
+		quark = g_quark_from_static_string ("canon-nick");
+	}
+	return quark;
+}
+
+static const gchar *gimme_an_alias (TpHandleRepoIface *repo, TpHandle handle) {
+	const char *alias = tp_handle_get_qdata (repo, handle, _canon_nick_quark());
+
+	if (alias != NULL) {
+		return alias;
+	} else {
+		return tp_handle_inspect(repo, handle);
+	}
+}
+
+
+static void conn_aliasing_fill_contact_attributes(GObject *obj,
+                                                  const GArray *contacts,
+                                                  GHashTable *attributes_hash) {
+	KindlingConnection *self = KINDLING_CONNECTION(obj);
+	TpHandleRepoIface *repo = tp_base_connection_get_handles (TP_BASE_CONNECTION(self), TP_HANDLE_TYPE_CONTACT);
+	guint i;
+
+	for (i = 0; i < contacts->len; i++) {
+		TpHandle handle = g_array_index(contacts, TpHandle, i);
+		const gchar *alias = gimme_an_alias(repo, handle);
+		g_assert(alias != NULL);
+		tp_contacts_mixin_set_contact_attribute (attributes_hash,
+		                                         handle,
+		                                         TP_IFACE_CONNECTION_INTERFACE_ALIASING"/alias",
+		                                         tp_g_value_slice_new_string (alias));
+	}
 }
 
 static void kindling_connection_constructed (GObject *object) {
@@ -134,7 +177,9 @@ static void kindling_connection_constructed (GObject *object) {
 	                 "authenticate",
 	                 _soup_authenticate_cb,
 	                 object);
-	/* TODO: Add initialization code here */
+	tp_contacts_mixin_add_contact_attributes_iface (object,
+	                                                TP_IFACE_CONNECTION_INTERFACE_ALIASING,
+	                                                conn_aliasing_fill_contact_attributes);
 }
 
 static void
@@ -177,7 +222,7 @@ static GPtrArray *_iface_create_channel_managers(TpBaseConnection *self) {
 	KindlingConnectionPrivate *priv = KINDLING_CONNECTION_GET_PRIVATE(self);
 	GPtrArray *managers = g_ptr_array_sized_new (1);
 	g_ptr_array_add (managers, g_object_new (KINDLING_TYPE_MUC_MANAGER,
-	                                      //   "connection", self,
+	                                         "connection", self,
 	                                         NULL));
 	priv->password_manager = tp_simple_password_manager_new(self);
 	g_ptr_array_add(managers, priv->password_manager);
@@ -200,6 +245,19 @@ _soup_get_user_cb (SoupSession *session, SoupMessage *msg, gpointer user_data) {
 	KindlingConnection *conn = KINDLING_CONNECTION(user_data);
 	TpBaseConnection *base_conn = TP_BASE_CONNECTION(conn);
 	KindlingConnectionPrivate *priv = KINDLING_CONNECTION_GET_PRIVATE(conn);
+	if (msg->status_code != 200) {
+		if (base_conn->status != TP_CONNECTION_STATUS_DISCONNECTED) {
+	        GError *error = g_error_new(TP_ERRORS, TP_ERROR_PERMISSION_DENIED, "non 200 status code %d", msg->status_code);
+
+			_connection_disconnect_with_gerror(conn,
+			                                   TP_CONNECTION_STATUS_REASON_AUTHENTICATION_FAILED,
+			                                   "debug-message",
+			                                   error);
+	        g_error_free(error);
+
+		}
+		return;
+	}
 	JsonParser *parser = json_parser_new();
 	GError *error = NULL;
 	json_parser_load_from_data(parser, msg->response_body->data, -1, &error);
@@ -225,7 +283,7 @@ _soup_get_user_cb (SoupSession *session, SoupMessage *msg, gpointer user_data) {
 
 	if (priv->api_token == NULL) {
 		if (base_conn->status != TP_CONNECTION_STATUS_DISCONNECTED) {
-	        GError *error = g_error_new_literal(TP_ERRORS, 1, "no api token");
+	        GError *error = g_error_new(TP_ERRORS, TP_ERROR_PERMISSION_DENIED, "no api token");
 
 			_connection_disconnect_with_gerror(conn,
 			                                   TP_CONNECTION_STATUS_REASON_AUTHENTICATION_FAILED,
@@ -285,6 +343,7 @@ static gboolean _iface_start_connecting(TpBaseConnection *self, GError **error) 
 	KindlingConnectionPrivate *priv = KINDLING_CONNECTION_GET_PRIVATE(self);
 	TpHandleRepoIface *contact_handles = tp_base_connection_get_handles (self, TP_HANDLE_TYPE_CONTACT);
 	self->self_handle = tp_handle_ensure(contact_handles, priv->username, NULL, error);
+	g_printf("connecting with self handle %d\n", self->self_handle);
 	if (!self->self_handle) {
 		return FALSE;
 	}
@@ -299,6 +358,7 @@ static gboolean _iface_start_connecting(TpBaseConnection *self, GError **error) 
 
 static void _iface_shut_down(TpBaseConnection *self) {
 		g_printf("connection shut down\n");
+	tp_base_connection_finish_shutdown(self);
 }
 
 static void _print_status_cb (TpBaseConnection *self) {
@@ -335,5 +395,7 @@ kindling_connection_class_init (KindlingConnectionClass *klass)
 	g_object_class_install_property (object_class, PROP_USERNAME, param_spec);
 	param_spec = g_param_spec_string ("password", "password", "campfire password to auth with",NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 	g_object_class_install_property (object_class, PROP_PASSWORD, param_spec);
+
+	tp_contacts_mixin_class_init (object_class, G_STRUCT_OFFSET (KindlingConnectionClass, contacts));
 }
 
