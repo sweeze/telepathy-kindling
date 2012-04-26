@@ -50,6 +50,9 @@ struct _KindlingMUCManager
 
 GType kindling_muc_manager_get_type (void) G_GNUC_CONST;
 
+void kindling_muc_manager_connected(KindlingMUCManager *manager);
+void kindling_muc_manager_disconnected(KindlingMUCManager *manager);
+
 G_END_DECLS
 
 #endif /* _KINDLING_MUC_MANAGER_H_ */

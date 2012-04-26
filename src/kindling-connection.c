@@ -55,10 +55,13 @@ struct _KindlingConnectionPrivate {
 	char *password;
 	char *api_token;
 
+	KindlingMUCManager *muc_manager;
+
 	//for actual auth
 	TpSimplePasswordManager *password_manager;
 	SoupSession *soup_session;
 	gulong soup_auth_cb_handle;
+	guint auth_retries;
 };
 
 #define KINDLING_CONNECTION_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE((o), KINDLING_TYPE_CONNECTION, KindlingConnectionPrivate))
@@ -118,7 +121,7 @@ static void _soup_authenticate_cb(SoupSession *session,
                                   gboolean retrying,
                                   gpointer user_data) {
 	KindlingConnectionPrivate *priv = KINDLING_CONNECTION_GET_PRIVATE(user_data);
-	if (!retrying) {
+	if (!retrying || priv->auth_retries == 0) {
 		if (priv->api_token != NULL) {
 			g_printf("soup authenitcate with token\n");
 			soup_auth_authenticate (auth, priv->api_token, "x");
@@ -126,6 +129,8 @@ static void _soup_authenticate_cb(SoupSession *session,
 			g_printf("soup authenitcate with username\n");
 			soup_auth_authenticate(auth, priv->username, priv->password);
 		}
+	} else {
+		g_printf("not retrying auth\n");
 	}
 									  
 }
@@ -171,6 +176,7 @@ static void conn_aliasing_fill_contact_attributes(GObject *obj,
 static void kindling_connection_constructed (GObject *object) {
 		g_printf("connection constructed\n");
 	KindlingConnectionPrivate *priv = KINDLING_CONNECTION_GET_PRIVATE(object);
+	priv->auth_retries = 0;
 	priv->soup_session = soup_session_async_new();
 
 	priv->soup_auth_cb_handle = g_signal_connect(priv->soup_session,
@@ -221,9 +227,10 @@ static GPtrArray *_iface_create_channel_managers(TpBaseConnection *self) {
 		g_printf("connection create chan manager\n");
 	KindlingConnectionPrivate *priv = KINDLING_CONNECTION_GET_PRIVATE(self);
 	GPtrArray *managers = g_ptr_array_sized_new (1);
-	g_ptr_array_add (managers, g_object_new (KINDLING_TYPE_MUC_MANAGER,
+	priv->muc_manager = g_object_new (KINDLING_TYPE_MUC_MANAGER,
 	                                         "connection", self,
-	                                         NULL));
+	                                         NULL);
+	g_ptr_array_add (managers, priv->muc_manager);
 	priv->password_manager = tp_simple_password_manager_new(self);
 	g_ptr_array_add(managers, priv->password_manager);
 	return managers;
@@ -278,6 +285,7 @@ _soup_get_user_cb (SoupSession *session, SoupMessage *msg, gpointer user_data) {
 	json_reader_read_member (reader, "api_auth_token");
 	g_free(priv->api_token);
 	priv->api_token = g_strdup(json_reader_get_string_value(reader));
+	priv->auth_retries = 0; // reset so we reauthenticate
 	g_object_unref (reader);
 	g_object_unref (parser);
 
@@ -308,6 +316,15 @@ static void _start_connecting_continue(KindlingConnection *self) {
 	g_free(message);
 	//tp_base_connection_change_status (TP_BASE_CONNECTION(self), TP_CONNECTION_STATUS_CONNECTED, TP_CONNECTION_STATUS_REASON_REQUESTED);
 	soup_session_queue_message(priv->soup_session, msg, _soup_get_user_cb, self);
+}
+
+void kindling_connection_list_rooms(KindlingConnection *self, SoupSessionCallback cb, gpointer data) {
+	KindlingConnectionPrivate *priv = KINDLING_CONNECTION_GET_PRIVATE(self);
+	gchar *message = g_strdup_printf("https://%s.campfirenow.com/rooms.json", priv->server);
+	g_printf("getting room list at %s\n", message);
+	SoupMessage *msg = soup_message_new("GET", message);
+	g_free(message);
+	soup_session_queue_message(priv->soup_session, msg, cb, data);
 }
 
 static void _password_prompt_cb (GObject *source, GAsyncResult *result, gpointer user_data) {
@@ -365,6 +382,18 @@ static void _print_status_cb (TpBaseConnection *self) {
 	g_printf("Status is : %d\n", self->status);
 }
 
+static void _connected_cb (TpBaseConnection *self) {
+	g_printf("Status is : %d (connected) \n", self->status);
+	KindlingConnectionPrivate *priv = KINDLING_CONNECTION_GET_PRIVATE(self);
+	kindling_muc_manager_connected(priv->muc_manager);
+}
+
+static void _disconnected_cb (TpBaseConnection *self) {
+	g_printf("Status is : %d (disconnected) \n", self->status);
+	KindlingConnectionPrivate *priv = KINDLING_CONNECTION_GET_PRIVATE(self);
+	kindling_muc_manager_disconnected(priv->muc_manager);
+}
+
 static void
 kindling_connection_class_init (KindlingConnectionClass *klass)
 {
@@ -386,8 +415,8 @@ kindling_connection_class_init (KindlingConnectionClass *klass)
 	parent_class->shut_down = _iface_shut_down;
 	parent_class->interfaces_always_present = interfaces_always_present;
 	parent_class->connecting = _print_status_cb;
-	parent_class->connected = _print_status_cb;
-	parent_class->disconnected = _print_status_cb;
+	parent_class->connected = _connected_cb;
+	parent_class->disconnected = _disconnected_cb;
 
 	param_spec = g_param_spec_string ("server", "server", "campfire server to connect to",NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 	g_object_class_install_property (object_class, PROP_SERVER, param_spec);

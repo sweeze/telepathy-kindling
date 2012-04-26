@@ -23,6 +23,7 @@ telepathy-kindling is free software: you can redistribute it and/or modify it
 #include <glib-object.h>
 #include <telepathy-glib/base-protocol.h>
 #include <telepathy-glib/contacts-mixin.h>
+#include <libsoup/soup.h>
 
 G_BEGIN_DECLS
 
@@ -52,7 +53,7 @@ struct _KindlingConnection
 
 GType kindling_connection_get_type (void) G_GNUC_CONST;
 const gchar * const *kindling_connection_get_implemented_interfaces (void);
-
+void kindling_connection_list_rooms(KindlingConnection *self, SoupSessionCallback cb, gpointer data);
 G_END_DECLS
 
 #endif /* _KINDLING_CONNECTION_H_ */
