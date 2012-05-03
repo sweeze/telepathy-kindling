@@ -17,6 +17,7 @@ telepathy-kindling is free software: you can redistribute it and/or modify it
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.";
  */
 #include "kindling-connection.h"
+#include "kindling-roomlist-manager.h"
 #include "kindling-muc-manager.h"
 #include <telepathy-glib/interfaces.h>
 #include <telepathy-glib/handle-repo-dynamic.h>
@@ -55,7 +56,7 @@ struct _KindlingConnectionPrivate {
 	char *password;
 	char *api_token;
 
-	KindlingMUCManager *muc_manager;
+	KindlingRoomlistManager *roomlist_manager;
 
 	//for actual auth
 	TpSimplePasswordManager *password_manager;
@@ -227,12 +228,14 @@ static GPtrArray *_iface_create_channel_managers(TpBaseConnection *self) {
 		g_printf("connection create chan manager\n");
 	KindlingConnectionPrivate *priv = KINDLING_CONNECTION_GET_PRIVATE(self);
 	GPtrArray *managers = g_ptr_array_sized_new (1);
-	priv->muc_manager = g_object_new (KINDLING_TYPE_MUC_MANAGER,
+	priv->roomlist_manager = g_object_new (KINDLING_TYPE_ROOMLIST_MANAGER,
 	                                         "connection", self,
 	                                         NULL);
-	g_ptr_array_add (managers, priv->muc_manager);
+	g_ptr_array_add (managers, priv->roomlist_manager);
 	priv->password_manager = tp_simple_password_manager_new(self);
 	g_ptr_array_add(managers, priv->password_manager);
+
+	g_ptr_array_add(managers, g_object_new (KINDLING_TYPE_MUC_MANAGER, "connection", self, NULL));
 	return managers;
 }
 
@@ -385,13 +388,13 @@ static void _print_status_cb (TpBaseConnection *self) {
 static void _connected_cb (TpBaseConnection *self) {
 	g_printf("Status is : %d (connected) \n", self->status);
 	KindlingConnectionPrivate *priv = KINDLING_CONNECTION_GET_PRIVATE(self);
-	kindling_muc_manager_connected(priv->muc_manager);
+	//kindling_roomlist_manager_connected(priv->roomlist_manager);
 }
 
 static void _disconnected_cb (TpBaseConnection *self) {
 	g_printf("Status is : %d (disconnected) \n", self->status);
 	KindlingConnectionPrivate *priv = KINDLING_CONNECTION_GET_PRIVATE(self);
-	kindling_muc_manager_disconnected(priv->muc_manager);
+	//kindling_roomlist_manager_disconnected(priv->roomlist_manager);
 }
 
 static void

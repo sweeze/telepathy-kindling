@@ -39,7 +39,6 @@ enum {
 typedef struct _KindlingMUCManagerPrivate KindlingMUCManagerPrivate;
 struct _KindlingMUCManagerPrivate {
         KindlingConnection *conn;
-        GHashTable *channels;
 	    guint timeout_id;
 };
 
@@ -88,29 +87,6 @@ kindling_muc_manager_finalize (GObject *object)
 
 	G_OBJECT_CLASS (kindling_muc_manager_parent_class)->finalize (object);
 }
-static void
-_list_channels_cb (SoupSession *session, SoupMessage *msg, gpointer user_data) {
-	g_printf("got room list:\n\t%s\n",msg->response_body->data);
-}
-static gboolean _poll_channels_cb (gpointer data) {
-	KindlingMUCManager *manager = KINDLING_MUC_MANAGER(data);
-	KindlingMUCManagerPrivate *priv = KINDLING_MUC_MANAGER_GET_PRIVATE(manager);
-	KindlingConnection *conn = priv->conn;
-	g_printf("polling for channels\n");
-	kindling_connection_list_rooms (conn, _list_channels_cb, manager);
-	return TRUE;
-}
-
-void kindling_muc_manager_connected(KindlingMUCManager *manager) {
-	KindlingMUCManagerPrivate *priv = KINDLING_MUC_MANAGER_GET_PRIVATE(manager);
-	_poll_channels_cb(manager);
-	priv->timeout_id = g_timeout_add_seconds (300, _poll_channels_cb, manager);
-}
-
-void kindling_muc_manager_disconnected(KindlingMUCManager *manager) {
-	KindlingMUCManagerPrivate *priv = KINDLING_MUC_MANAGER_GET_PRIVATE(manager);
-	g_source_remove (priv->timeout_id);
-}
 
 static void kindling_muc_manager_foreach_channel(TpChannelManager *manager, TpExportableChannelFunc func, gpointer data) {
 	g_printf("foreach channel\n");
@@ -145,19 +121,19 @@ static void kindling_muc_manager_type_foreach_channel_class(GType type, TpChanne
 static void kindling_muc_manager_ensure_channel(TpChannelManager *manager,
                                                          gpointer request_token,
                                                          GHashTable *request_properties) {
-	g_printf("ensure channel\n");
+	g_printf("ensure channel %s\n", tp_asv_get_string (request_properties,TP_IFACE_CHANNEL ".ChannelType"));
 }
 
 static void kindling_muc_manager_request_channel(TpChannelManager *manager,
                                                          gpointer request_token,
                                                          GHashTable *request_properties) {
-	g_printf("request channel\n");
+	g_printf("request channel %s\n", tp_asv_get_string (request_properties,TP_IFACE_CHANNEL ".ChannelType"));
 }
 
 static void kindling_muc_manager_create_channel(TpChannelManager *manager,
                                                          gpointer request_token,
                                                          GHashTable *request_properties) {
-	g_printf("create channel\n");
+	g_printf("create channel %s\n", tp_asv_get_string (request_properties,TP_IFACE_CHANNEL ".ChannelType"));
 }
 
 static void
