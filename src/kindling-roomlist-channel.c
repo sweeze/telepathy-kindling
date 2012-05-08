@@ -21,6 +21,7 @@ telepathy-kindling is free software: you can redistribute it and/or modify it
 #include "kindling-connection.h"
 #include <telepathy-glib/svc-channel.h>
 #include <telepathy-glib/interfaces.h>
+#include <telepathy-glib/gtypes.h>
 #include <json-glib/json-glib.h>
 
 
@@ -34,6 +35,7 @@ G_DEFINE_TYPE_WITH_CODE (KindlingRoomlistChannel, kindling_roomlist_channel,
 typedef struct _KindlingRoomlistChannelPrivate KindlingRoomlistChannelPrivate;
 struct _KindlingRoomlistChannelPrivate {
 	gboolean is_listing;
+	GPtrArray *rooms;
 };
 
 #define KINDLING_ROOMLIST_CHANNEL_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), KINDLING_TYPE_ROOMLIST_CHANNEL, KindlingRoomlistChannelPrivate))
@@ -52,14 +54,13 @@ kindling_roomlist_channel_constructed (GObject *obj) {
 	GObjectClass *parent_class = kindling_roomlist_channel_parent_class;
 	KindlingRoomlistChannel *self = KINDLING_ROOMLIST_CHANNEL(obj);
 	TpBaseChannel *base_chan = (TpBaseChannel *)self;
-	TpBaseConnection *conn = tp_base_channel_get_connection (base_chan);
-	TpHandleRepoIface *room_handles;
 	if (parent_class->constructed != NULL) {
 		parent_class->constructed(obj);
 	}
 	KindlingRoomlistChannelPrivate *priv = KINDLING_ROOMLIST_CHANNEL_GET_PRIVATE(self);
 	priv->is_listing = FALSE;
-	room_handles = tp_base_connection_get_handles(conn, TP_HANDLE_TYPE_ROOM);
+	priv->rooms = g_ptr_array_new ();
+	
 	tp_base_channel_register(TP_BASE_CHANNEL(obj));
 
 }
@@ -110,15 +111,68 @@ static void
 _room_list_callback (SoupSession *session, SoupMessage *msg, gpointer user_data) {
 	g_printf("got room list:\n\t%s\n",msg->response_body->data);
 	KindlingRoomlistChannel *self = KINDLING_ROOMLIST_CHANNEL(user_data);
+	KindlingRoomlistChannelPrivate *priv = KINDLING_ROOMLIST_CHANNEL_GET_PRIVATE(self);
 	tp_svc_channel_type_room_list_emit_listing_rooms (self, FALSE);
-
+	TpBaseConnection *base_connection = tp_base_channel_get_connection (TP_BASE_CHANNEL(self));
+	TpHandleRepoIface *room_repo = tp_base_connection_get_handles (base_connection, TP_HANDLE_TYPE_ROOM);
 	JsonParser *parser = json_parser_new();
 	GError *error = NULL;
+	int i;
 	json_parser_load_from_data (parser, msg->response_body->data, -1, &error);
 	if (error == NULL) {
 		JsonReader *reader = json_reader_new(json_parser_get_root (parser));
+		json_reader_read_member (reader, "rooms");
+		gint num_rooms = json_reader_count_elements (reader);
+		g_printf("should be %d # rooms\n", num_rooms);
+		for (i = 0; i < num_rooms; i++) {
+			GValue room = {0,};
+			GValue handle_name = {0,};
+			GHashTable *keys;
+			TpHandle handle;
+			const gchar *room_name;
+			gint64 room_id;
+			json_reader_read_element(reader, i);
+			
+			json_reader_read_member (reader, "name");
+			room_name = json_reader_get_string_value (reader);
+			json_reader_end_member (reader);
+			
+			json_reader_read_member (reader, "id");
+			room_id = json_reader_get_int_value (reader);
+			json_reader_end_member (reader);
+			
+			json_reader_end_element(reader);
+			g_printf("Found room %s with id %d\n", room_name, room_id);
+			handle = tp_handle_ensure(room_repo, room_name, NULL, NULL);
+			if (handle != 0) {
+				keys = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, NULL);
+
+				g_value_init (&handle_name, G_TYPE_STRING);
+				g_value_take_string(&handle_name, room_name);
+				g_hash_table_insert(keys, "handle-name", &handle_name);
+
+				g_value_init(&room, TP_STRUCT_TYPE_ROOM_INFO);
+				g_value_take_boxed(&room, 
+				                   dbus_g_type_specialized_construct (TP_STRUCT_TYPE_ROOM_INFO));
+				dbus_g_type_struct_set(&room,
+				                       0, handle,
+				                       1, "org.freedesktop.Telepathy.Channel.Type.Text",
+				                       2, keys,
+				                       G_MAXUINT);
+				g_ptr_array_add(priv->rooms, g_value_get_boxed(&room));
+				g_hash_table_unref(keys);
+			}
+		}
+		json_reader_end_member (reader);
 		g_object_unref (reader);
 	}
+	tp_svc_channel_type_room_list_emit_got_rooms (self, priv->rooms);
+	while (priv->rooms->len > 0) {
+		g_boxed_free(TP_STRUCT_TYPE_ROOM_INFO, g_ptr_array_index(priv->rooms, 0));
+		g_ptr_array_remove_index_fast (priv->rooms, 0);
+	}
+	priv->is_listing = FALSE;
+	tp_svc_channel_type_room_list_emit_listing_rooms (self, FALSE);
 	g_object_unref (parser);
 }
 
