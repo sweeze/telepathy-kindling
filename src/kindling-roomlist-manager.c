@@ -72,31 +72,6 @@ static void kindling_roomlist_manager_get_property(GObject *obj, guint prop_id, 
 }
 
 static void
-_list_channels_cb (SoupSession *session, SoupMessage *msg, gpointer user_data) {
-	g_printf("got room list:\n\t%s\n",msg->response_body->data);
-}
-static gboolean _poll_channels_cb (gpointer data) {
-	KindlingRoomlistManager *manager = KINDLING_ROOMLIST_MANAGER(data);
-	KindlingRoomlistManagerPrivate *priv = KINDLING_ROOMLIST_MANAGER_GET_PRIVATE(manager);
-	KindlingConnection *conn = priv->conn;
-	g_printf("polling for channels\n");
-	kindling_connection_list_rooms (conn, _list_channels_cb, manager);
-	return TRUE;
-}
-
-void kindling_roomlist_manager_connected(KindlingRoomlistManager *manager) {
-	KindlingRoomlistManagerPrivate *priv = KINDLING_ROOMLIST_MANAGER_GET_PRIVATE(manager);
-	_poll_channels_cb(manager);
-	priv->timeout_id = g_timeout_add_seconds (300, _poll_channels_cb, manager);
-}
-
-void kindling_roomlist_manager_disconnected(KindlingRoomlistManager *manager) {
-	KindlingRoomlistManagerPrivate *priv = KINDLING_ROOMLIST_MANAGER_GET_PRIVATE(manager);
-	g_source_remove (priv->timeout_id);
-}
-
-
-static void
 kindling_roomlist_manager_init (KindlingRoomlistManager *self)
 {
     KindlingRoomlistManagerPrivate *priv = KINDLING_ROOMLIST_MANAGER_GET_PRIVATE(self);

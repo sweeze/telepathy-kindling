@@ -21,6 +21,7 @@ telepathy-kindling is free software: you can redistribute it and/or modify it
 #include "kindling-connection.h"
 #include <telepathy-glib/svc-channel.h>
 #include <telepathy-glib/interfaces.h>
+#include <json-glib/json-glib.h>
 
 
 static void roomlist_iface_init (gpointer, gpointer);
@@ -29,44 +30,14 @@ G_DEFINE_TYPE_WITH_CODE (KindlingRoomlistChannel, kindling_roomlist_channel,
                          TP_TYPE_BASE_CHANNEL,
                          G_IMPLEMENT_INTERFACE(TP_TYPE_SVC_CHANNEL_TYPE_ROOM_LIST, roomlist_iface_init));
 
-enum {
-	PROP_CONNECTION = 1,
-	LAST_PROPERTY_ENUM
-};
 
 typedef struct _KindlingRoomlistChannelPrivate KindlingRoomlistChannelPrivate;
 struct _KindlingRoomlistChannelPrivate {
-        KindlingConnection *conn;
-	
+	gboolean is_listing;
 };
+
 #define KINDLING_ROOMLIST_CHANNEL_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), KINDLING_TYPE_ROOMLIST_CHANNEL, KindlingRoomlistChannelPrivate))
 
-static void kindling_roomlist_channel_set_property(GObject *obj, guint prop_id, const GValue *value, GParamSpec *pspec) {
-		g_printf("roomlist-channel set prop %d\n", prop_id);
-	KindlingRoomlistChannelPrivate *priv = KINDLING_ROOMLIST_CHANNEL_GET_PRIVATE(obj);
-	switch (prop_id) {
-		case PROP_CONNECTION:
-			priv->conn = g_value_get_object(value);
-			break;
-		default:
-			G_OBJECT_WARN_INVALID_PROPERTY_ID(obj, prop_id, pspec);
-            break;
-	}
-}
-
-static void kindling_roomlist_channel_get_property(GObject *obj, guint prop_id, GValue *value, GParamSpec *pspec) {
-		g_printf("roomlist-channel get prop %d\n", prop_id);
-	KindlingRoomlistChannelPrivate *priv = KINDLING_ROOMLIST_CHANNEL_GET_PRIVATE(obj);
-	switch (prop_id) {
-		case PROP_CONNECTION:
-			g_value_set_object(value, priv->conn);
-			break;
-		default:
-			G_OBJECT_WARN_INVALID_PROPERTY_ID(obj, prop_id, pspec);
-            break;
-	}
-			
-}
 static void
 kindling_roomlist_channel_init (KindlingRoomlistChannel *kindling_roomlist_channel)
 {
@@ -74,6 +45,23 @@ kindling_roomlist_channel_init (KindlingRoomlistChannel *kindling_roomlist_chann
     g_printf("roomlist init\n");
 
 	/* TODO: Add initialization code here */
+}
+static void
+kindling_roomlist_channel_constructed (GObject *obj) {
+    g_printf("roomlist constructed\n");
+	GObjectClass *parent_class = kindling_roomlist_channel_parent_class;
+	KindlingRoomlistChannel *self = KINDLING_ROOMLIST_CHANNEL(obj);
+	TpBaseChannel *base_chan = (TpBaseChannel *)self;
+	TpBaseConnection *conn = tp_base_channel_get_connection (base_chan);
+	TpHandleRepoIface *room_handles;
+	if (parent_class->constructed != NULL) {
+		parent_class->constructed(obj);
+	}
+	KindlingRoomlistChannelPrivate *priv = KINDLING_ROOMLIST_CHANNEL_GET_PRIVATE(self);
+	priv->is_listing = FALSE;
+	room_handles = tp_base_connection_get_handles(conn, TP_HANDLE_TYPE_ROOM);
+	tp_base_channel_register(TP_BASE_CHANNEL(obj));
+
 }
 
 static void
@@ -89,6 +77,11 @@ static const gchar *kindling_roomlist_channel_interfaces[] = {
 };
 
 static void
+kindling_roomlist_channel_close(TpBaseChannel *base) {
+	tp_base_channel_destroyed(base);
+}
+
+static void
 kindling_roomlist_channel_class_init (KindlingRoomlistChannelClass *klass)
 {
     g_printf("roomlist class init\n");
@@ -97,32 +90,60 @@ kindling_roomlist_channel_class_init (KindlingRoomlistChannelClass *klass)
 	GParamSpec *param_spec;
 	g_type_class_add_private (klass, sizeof(KindlingRoomlistChannelPrivate));
 	
-	object_class->set_property = kindling_roomlist_channel_set_property;
-	object_class->get_property = kindling_roomlist_channel_get_property;
 	object_class->finalize = kindling_roomlist_channel_finalize;
+	object_class->constructed = kindling_roomlist_channel_constructed;
+	
 	parent_class->channel_type = TP_IFACE_CHANNEL_TYPE_ROOM_LIST;
 	parent_class->interfaces = kindling_roomlist_channel_interfaces;
-	param_spec = g_param_spec_object
-		("connection", "connection", "connection", KINDLING_TYPE_CONNECTION, G_PARAM_READWRITE);
-	g_object_class_install_property (object_class, PROP_CONNECTION, param_spec);
+	parent_class->target_handle_type = TP_HANDLE_TYPE_NONE;
+	parent_class->close = kindling_roomlist_channel_close;
 }
 
 static void
 kindling_roomlist_channel_stop_listing (TpSvcChannelTypeRoomList *iface,
                                       DBusGMethodInvocation *context) {
     g_printf("roomlist stop listing\n");
+    tp_svc_channel_type_room_list_return_from_stop_listing (context);
+}
+
+static void
+_room_list_callback (SoupSession *session, SoupMessage *msg, gpointer user_data) {
+	g_printf("got room list:\n\t%s\n",msg->response_body->data);
+	KindlingRoomlistChannel *self = KINDLING_ROOMLIST_CHANNEL(user_data);
+	tp_svc_channel_type_room_list_emit_listing_rooms (self, FALSE);
+
+	JsonParser *parser = json_parser_new();
+	GError *error = NULL;
+	json_parser_load_from_data (parser, msg->response_body->data, -1, &error);
+	if (error == NULL) {
+		JsonReader *reader = json_reader_new(json_parser_get_root (parser));
+		g_object_unref (reader);
+	}
+	g_object_unref (parser);
 }
 
 static void
 kindling_roomlist_channel_list_rooms (TpSvcChannelTypeRoomList *iface,
                                       DBusGMethodInvocation *context) {
     g_printf("roomlist list rooms\n");
+	KindlingRoomlistChannel *self = KINDLING_ROOMLIST_CHANNEL(iface);
+    KindlingRoomlistChannelPrivate *priv = KINDLING_ROOMLIST_CHANNEL_GET_PRIVATE(self);
+    TpBaseChannel *base = TP_BASE_CHANNEL(iface);
+    KindlingConnection *conn = KINDLING_CONNECTION(tp_base_channel_get_connection (base));
+    priv->is_listing = TRUE;
+    tp_svc_channel_type_room_list_emit_listing_rooms (iface, TRUE);
+
+    kindling_connection_list_rooms (conn, _room_list_callback, self);
+
+    tp_svc_channel_type_room_list_return_from_list_rooms (context);
 }
 
 static void
 kindling_roomlist_channel_get_listing_rooms (TpSvcChannelTypeRoomList *iface,
                                       DBusGMethodInvocation *context) {
-    g_printf("roomlist is listing?\n");
+    KindlingRoomlistChannelPrivate *priv = KINDLING_ROOMLIST_CHANNEL_GET_PRIVATE(iface); 
+	tp_svc_channel_type_room_list_return_from_get_listing_rooms (
+      context, priv->is_listing);  
 }
 
 static void roomlist_iface_init (gpointer g_iface, gpointer iface_data) {
