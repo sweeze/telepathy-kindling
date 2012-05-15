@@ -172,7 +172,7 @@ static gboolean kindling_roomlist_manager_get_channel(TpChannelManager *manager,
 		tp_channel_manager_emit_request_already_satisfied (manager, request_token, TP_EXPORTABLE_CHANNEL(g_ptr_array_index (priv->channels,0)));
         return TRUE;
 	}
-    channel = g_object_new(KINDLING_TYPE_ROOMLIST_CHANNEL, "connection", priv->conn);
+    channel = g_object_new(KINDLING_TYPE_ROOMLIST_CHANNEL, "connection", priv->conn, NULL);
     g_signal_connect (channel, "closed", (GCallback) roomlist_channel_closed_cb, manager);
     g_ptr_array_add(priv->channels, channel);
     GSList *request_tokens = g_slist_prepend (NULL, request_token);
