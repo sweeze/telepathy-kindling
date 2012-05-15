@@ -147,6 +147,15 @@ static void kindling_roomlist_manager_type_foreach_channel_class (GType type,
 	g_hash_table_unref (table);
 }
 
+static void roomlist_channel_closed_cb (KindlingRoomlistChannel *channel, gpointer user_data) {
+	KindlingRoomlistManager *self = KINDLING_ROOMLIST_MANAGER(user_data);
+	KindlingRoomlistManagerPrivate *priv = KINDLING_ROOMLIST_MANAGER_GET_PRIVATE(self);
+	tp_channel_manager_emit_channel_closed_for_object (self, TP_EXPORTABLE_CHANNEL(channel));
+	if (priv->channels != NULL) {
+		g_ptr_array_remove (priv->channels, channel);
+		g_object_unref (channel);
+	}
+}
 
 static gboolean kindling_roomlist_manager_get_channel(TpChannelManager *manager,
                                                          gpointer request_token,
@@ -159,18 +168,19 @@ static gboolean kindling_roomlist_manager_get_channel(TpChannelManager *manager,
                     TP_IFACE_CHANNEL_TYPE_ROOM_LIST)) {
 		return FALSE;
 	}
-	if (priv->channels->len > 0) {
+	if (priv->channels->len > 0 && !require_new) {
 		tp_channel_manager_emit_request_already_satisfied (manager, request_token, TP_EXPORTABLE_CHANNEL(g_ptr_array_index (priv->channels,0)));
         return TRUE;
 	}
     channel = g_object_new(KINDLING_TYPE_ROOMLIST_CHANNEL, "connection", priv->conn);
+    g_signal_connect (channel, "closed", (GCallback) roomlist_channel_closed_cb, manager);
     g_ptr_array_add(priv->channels, channel);
     GSList *request_tokens = g_slist_prepend (NULL, request_token);
     tp_channel_manager_emit_new_channel (manager,
                                          TP_EXPORTABLE_CHANNEL(channel),
                                          request_tokens);
     g_slist_free (request_tokens);
-    return FALSE;
+    return TRUE;
 }
 
 static gboolean kindling_roomlist_manager_ensure_channel(TpChannelManager *manager,

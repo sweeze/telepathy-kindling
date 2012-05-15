@@ -53,7 +53,6 @@ kindling_roomlist_channel_constructed (GObject *obj) {
     g_printf("roomlist constructed\n");
 	GObjectClass *parent_class = kindling_roomlist_channel_parent_class;
 	KindlingRoomlistChannel *self = KINDLING_ROOMLIST_CHANNEL(obj);
-	TpBaseChannel *base_chan = (TpBaseChannel *)self;
 	if (parent_class->constructed != NULL) {
 		parent_class->constructed(obj);
 	}
@@ -71,6 +70,12 @@ kindling_roomlist_channel_finalize (GObject *object)
 	/* TODO: Add deinitalization code here */
     g_printf("roomlist finalize\n");
 
+	KindlingRoomlistChannelPrivate *priv = KINDLING_ROOMLIST_CHANNEL_GET_PRIVATE(object);
+	while (priv->rooms->len > 0) {
+		g_boxed_free(TP_STRUCT_TYPE_ROOM_INFO, g_ptr_array_index(priv->rooms, 0));
+		g_ptr_array_remove_index_fast (priv->rooms, 0);
+	}
+	g_ptr_array_free(priv->rooms, TRUE);
 	G_OBJECT_CLASS (kindling_roomlist_channel_parent_class)->finalize (object);
 }
 static const gchar *kindling_roomlist_channel_interfaces[] = {
@@ -88,7 +93,6 @@ kindling_roomlist_channel_class_init (KindlingRoomlistChannelClass *klass)
     g_printf("roomlist class init\n");
 	GObjectClass* object_class = G_OBJECT_CLASS (klass);
 	TpBaseChannelClass* parent_class = TP_BASE_CHANNEL_CLASS (klass);
-	GParamSpec *param_spec;
 	g_type_class_add_private (klass, sizeof(KindlingRoomlistChannelPrivate));
 	
 	object_class->finalize = kindling_roomlist_channel_finalize;
