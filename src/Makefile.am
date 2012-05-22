@@ -29,7 +29,9 @@ telepathy_kindling_SOURCES = \
 	kindling-roomlist-manager.c \
 	kindling-roomlist-manager.h \
 	kindling-roomlist-channel.c \
-	kindling-roomlist-channel.h
+	kindling-roomlist-channel.h \
+	kindling-muc-channel.c \
+	kindling-muc-channel.h
 
 telepathy_kindling_LDFLAGS = \
 	-Wl,--export-dynamic
