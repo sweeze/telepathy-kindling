@@ -120,6 +120,14 @@ static void kindling_muc_manager_type_foreach_channel_class(GType type, TpChanne
 	g_hash_table_destroy(table);
 }
 
+static void _channel_closed_cb(KindlingMUCChannel *chan, gpointer user_data) {
+	KindlingMUCManager *manager = KINDLING_MUC_MANAGER(user_data);
+	KindlingMUCManagerPrivate *priv = KINDLING_MUC_MANAGER_GET_PRIVATE(manager);
+	TpHandle handle;
+	g_object_get(chan, "handle", &handle, NULL);
+	g_hash_table_remove(priv->channels, GUINT_TO_POINTER(handle));
+}
+
 static gboolean kindling_muc_manager_handle_channel(TpChannelManager *manager,
                                                 gpointer request_token,
                                                 GHashTable *request_properties,
@@ -157,6 +165,10 @@ static gboolean kindling_muc_manager_handle_channel(TpChannelManager *manager,
 		return TRUE;
 	} else {
 		// create channel
+		channel = g_object_new (KINDLING_TYPE_MUC_CHANNEL, "connection", priv->conn, NULL);
+		g_signal_connect(channel, "closed", (GCallback)_channel_closed_cb, manager);
+		g_hash_table_insert(priv->channels, GUINT_TO_POINTER(handle), channel);
+		return TRUE;
 	}
     return FALSE;
 }

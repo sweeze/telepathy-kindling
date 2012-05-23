@@ -22,6 +22,7 @@ telepathy-kindling is free software: you can redistribute it and/or modify it
 #include "kindling-connection.h"
 #include <telepathy-glib/channel-manager.h>
 #include <telepathy-glib/interfaces.h>
+#include <telepathy-glib/dbus.h>
 
 
 static void _roomlist_manager_iface_init(gpointer, gpointer);
@@ -91,7 +92,6 @@ static void
 kindling_roomlist_manager_class_init (KindlingRoomlistManagerClass *klass)
 {
 	GObjectClass* object_class = G_OBJECT_CLASS (klass);
-	GObjectClass* parent_class = G_OBJECT_CLASS (klass);
 	GParamSpec *param_spec;
 
 	g_type_class_add_private (klass, sizeof(KindlingRoomlistManagerPrivate));
