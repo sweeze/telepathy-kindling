@@ -18,7 +18,6 @@ telepathy-kindling is free software: you can redistribute it and/or modify it
  */
 
 #include "kindling-muc-channel.h"
-#include <telepathy-glib/base-channel.h>
 #include <telepathy-glib/message-mixin.h>
 #include <dbus/dbus-glib.h>
 

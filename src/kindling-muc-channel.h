@@ -21,6 +21,7 @@ telepathy-kindling is free software: you can redistribute it and/or modify it
 #define _KINDLING_MUC_CHANNEL_H_
 
 #include <glib-object.h>
+#include <telepathy-glib/base-channel.h>
 
 G_BEGIN_DECLS
 
@@ -38,12 +39,12 @@ typedef struct _KindlingMUCChannel KindlingMUCChannel;
 
 struct _KindlingMUCChannelClass
 {
-	GObjectClass parent_class;
+	TpBaseChannelClass parent_class;
 };
 
 struct _KindlingMUCChannel
 {
-	GObject parent_instance;
+	TpBaseChannel parent_instance;
 
  
 };
